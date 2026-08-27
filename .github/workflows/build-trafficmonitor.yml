@@ -1,0 +1,30 @@
+name: Build TrafficMonitor standard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['**']
+
+jobs:
+  build:
+    # windows-latest moved to Visual Studio 2026 in June 2026, which dropped the
+    # MFC libraries this project needs (MSB8041). windows-2022 still has VS2022 + MFC.
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build TrafficMonitor (standard, x64)
+        run: msbuild TrafficMonitor.sln -p:Configuration=Release -p:Platform=x64 -p:PlatformToolset=v143 -m
+
+      - name: Upload TrafficMonitor
+        uses: actions/upload-artifact@v4
+        with:
+          name: TrafficMonitor_x64
+          path: |
+            Bin/x64/Release/TrafficMonitor.exe
+            Bin/x64/Release/*.dll
+          if-no-files-found: error
