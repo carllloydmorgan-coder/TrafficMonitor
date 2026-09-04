@@ -75,6 +75,14 @@ protected:
 
     bool m_first_start{ true };     //初始时为true，在定时器第一次启动后置为flase
 
+    //---- Monitor count rule (custom change) --------------------------------
+    //Shows the main window only while more than one monitor is attached.
+    //Implemented in TrafficMonitorDlg.cpp, tuned by the constants at the top
+    //of that file. Nothing else in the program reads these two members.
+    int m_last_monitor_count{ 0 };  //monitor count when the rule last ran, 0 means not checked yet
+    void ApplyMonitorCountRule();   //does nothing unless the monitor count has actually changed
+    //------------------------------------------------------------------------
+
     // https://www.jianshu.com/p/9d4b68cdbd99
     struct Monitors
     {

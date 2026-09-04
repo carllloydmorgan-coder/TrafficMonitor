@@ -23,6 +23,19 @@
 #define new DEBUG_NEW
 #endif
 
+//---- Monitor count rule (custom change) ------------------------------------
+//The main window is shown only while at least MAIN_WND_MIN_MONITORS monitors
+//are attached, so the floating bar appears when the laptop is docked and goes
+//away when it is on its own screen.
+//
+//Set MONITOR_COUNT_RULE_ENABLED to false to switch the whole thing off and get
+//the stock behaviour back, without removing any of the code.
+constexpr bool MONITOR_COUNT_RULE_ENABLED{ true };
+//How many monitors must be attached for the main window to be shown.
+//2 means "hide it when the laptop screen is the only display".
+constexpr int MAIN_WND_MIN_MONITORS{ 2 };
+//----------------------------------------------------------------------------
+
 
 
 // CTrafficMonitorDlg 对话框
@@ -1671,6 +1684,12 @@ void CTrafficMonitorDlg::OnTimer(UINT_PTR nIDEvent)
             m_first_start = false;
         }
 
+        //Show or hide the main window for the number of monitors attached.
+        //On the first tick this settles the window into the right state for
+        //however the machine started up. After that it is a cheap safety net
+        //behind OnDisplaychange and returns at once unless the count changed.
+        ApplyMonitorCountRule();
+
         if (theApp.m_main_wnd_data.m_always_on_top && !theApp.m_cfg_data.m_hide_main_window)
         {
             //每隔1秒钟就判断一下前台窗口是否全屏
@@ -2906,8 +2925,52 @@ afx_msg LRESULT CTrafficMonitorDlg::OnMonitorInfoUpdated(WPARAM wParam, LPARAM l
 LRESULT CTrafficMonitorDlg::OnDisplaychange(WPARAM wParam, LPARAM lParam)
 {
     GetScreenSize();
+    //Apply the rule before CheckWindowPos, so that a window we have just
+    //brought back is then pulled onto a monitor that still exists.
+    ApplyMonitorCountRule();
     CheckWindowPos(true);
     return 0;
+}
+
+//Show or hide the main window according to how many monitors are attached.
+//
+//This only acts when the monitor count actually changes, so hiding or showing
+//the main window by hand from the tray menu stays in effect until the next
+//time a monitor is plugged in or unplugged.
+//
+//It is called from two places: OnDisplaychange, which is where Windows tells
+//us the display configuration changed, and once a second from the main timer
+//as a safety net for the cases where that message does not arrive (a monitor
+//waking from sleep, or a dock that reconfigures displays in stages). The timer
+//call costs one GetSystemMetrics and returns immediately when nothing changed.
+void CTrafficMonitorDlg::ApplyMonitorCountRule()
+{
+    if (!MONITOR_COUNT_RULE_ENABLED)
+        return;
+
+    const int monitor_count{ GetSystemMetrics(SM_CMONITORS) };
+    //Windows can report zero for a moment while displays are being
+    //reconfigured. Ignore that and wait for the next call.
+    if (monitor_count < 1)
+        return;
+
+    if (monitor_count == m_last_monitor_count)
+        return;             //nothing changed since the last check
+
+    m_last_monitor_count = monitor_count;
+
+    const bool should_hide{ monitor_count < MAIN_WND_MIN_MONITORS };
+    if (should_hide == theApp.m_cfg_data.m_hide_main_window)
+        return;             //already in the state we want
+
+    //Reuse the existing menu command rather than calling ShowWindow here. It
+    //keeps the notify icon logic intact, so hiding the main window on the
+    //laptop still leaves a tray icon to get back into the program.
+    SendMessage(WM_COMMAND, ID_SHOW_MAIN_WND);
+
+    //A window that has just come back should sit above the taskbar again.
+    if (!should_hide)
+        SetAlwaysOnTop();
 }
 
 
